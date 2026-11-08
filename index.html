@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EstudApp</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══════════════════════════════════════
+       01 – ECRÃ INICIAL
+  ════════════════════════════════════════ -->
+  <section id="screen-inicio" class="screen">
+    <div class="logo-emoji">📚</div>
+    <div class="logo-title">EstudApp</div>
+    <div class="logo-subtitle">O teu espaço de estudo pessoal</div>
+    <div class="btn-group mt-24">
+      <button class="btn btn-primary" onclick="goTo('screen-criar-conta')">Criar conta</button>
+      <button class="btn btn-secondary" onclick="goTo('screen-entrar')">Já tenho conta</button>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       02 – CRIAR CONTA
+  ════════════════════════════════════════ -->
+  <section id="screen-criar-conta" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-inicio')">←</button>
+      <h1>Criar conta</h1>
+    </div>
+    <div class="form-group">
+      <label>Nome completo</label>
+      <input type="text" id="cc-nome" placeholder="O teu nome">
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="cc-email" placeholder="email@exemplo.com">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="cc-password" placeholder="Mínimo 6 caracteres">
+    </div>
+    <button class="btn btn-primary mt-8" onclick="criarConta()">Criar conta</button>
+    <p class="text-center text-muted mt-16">
+      Já tens conta? <a href="#" onclick="goTo('screen-entrar')">Entrar</a>
+    </p>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       03 – ENTRAR
+  ════════════════════════════════════════ -->
+  <section id="screen-entrar" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-inicio')">←</button>
+      <h1>Entrar</h1>
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="en-email" placeholder="email@exemplo.com">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="en-password" placeholder="A tua password">
+    </div>
+    <button class="btn btn-primary mt-8" onclick="entrar()">Entrar</button>
+    <p class="text-center text-muted mt-16">
+      Não tens conta? <a href="#" onclick="goTo('screen-criar-conta')">Criar conta</a>
+    </p>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       04 – INÍCIO (HOME)
+  ════════════════════════════════════════ -->
+  <section id="screen-home" class="screen">
+    <!-- Bloco Fixo / Sticky: Cabeçalho + Progresso Diário -->
+    <div class="home-sticky-header">
+      <div class="page-header">
+        <h1 id="home-greeting">Olá! 👋</h1>
+        <div class="header-actions">
+          <button class="btn btn-sm btn-ghost btn-icon" id="btn-theme-home" onclick="toggleTheme()" title="Alternar tema">🌓</button>
+          <button class="btn btn-sm btn-ghost btn-icon" onclick="goTo('screen-definicoes')" title="Definições">⚙️</button>
+        </div>
+      </div>
+
+      <!-- Banner de sessão em curso -->
+      <div id="home-active-session-banner"></div>
+
+      <!-- Barra de estatísticas com progresso dinâmico (fixo) -->
+      <div class="stats-bar" style="margin-bottom:8px">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start">
+          <div>
+            <h2>Estudado hoje</h2>
+            <div class="big-num"><span id="home-min-hoje">0</span> min</div>
+          </div>
+          <div id="home-goal-pill" class="goal-pill">0%</div>
+        </div>
+        
+        <!-- Barra de progresso -->
+        <div class="progress-container">
+          <div class="progress-track">
+            <div id="home-progress-bar" class="progress-fill"></div>
+          </div>
+          <div class="progress-details">
+            <span id="home-meta-info">Meta: 0 min</span>
+            <span id="home-progress-remain">Faltam: 0 min</span>
+          </div>
+        </div>
+      </div>
+    </div><!-- /.home-sticky-header -->
+
+    <!-- Resumo rápido -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="num" id="home-num-materias">0</div>
+        <div class="lbl">Matérias</div>
+      </div>
+      <div class="stat-card">
+        <div class="num" id="home-num-sessoes">0</div>
+        <div class="lbl">Sessões hoje</div>
+      </div>
+    </div>
+
+    <!-- Lista de matérias -->
+    <div class="section-title">
+      Matérias
+      <button class="btn btn-sm btn-primary" onclick="goTo('screen-adicionar-materia')">+ Adicionar</button>
+    </div>
+    <div id="home-materias-list"></div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       05 – ADICIONAR MATÉRIA
+  ════════════════════════════════════════ -->
+  <section id="screen-adicionar-materia" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-home')">←</button>
+      <h1>Adicionar matéria</h1>
+    </div>
+    <div class="form-group">
+      <label>Nome da matéria</label>
+      <input type="text" id="am-nome" placeholder="ex: Matemática, História...">
+    </div>
+    <div class="form-group">
+      <label>Meta diária (minutos)</label>
+      <input type="number" id="am-meta" placeholder="ex: 30" min="0">
+    </div>
+    <div class="checkbox-group">
+      <input type="checkbox" id="am-conta-meta">
+      <label for="am-conta-meta">Conta para a meta diária</label>
+    </div>
+    <button class="btn btn-primary" onclick="adicionarMateria()">Guardar</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       06 – DETALHE DA MATÉRIA
+  ════════════════════════════════════════ -->
+  <section id="screen-detalhe-materia" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-home'); renderHome()">←</button>
+      <h1 id="dm-titulo">Matéria</h1>
+      <button class="btn btn-sm btn-ghost" onclick="abrirEditarMateria(currentMateriaId)">✏️ Editar</button>
+    </div>
+
+    <div class="stats-bar">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start">
+        <div>
+          <h2>Estudado hoje</h2>
+          <div class="big-num"><span id="dm-min-hoje">0</span> min</div>
+        </div>
+        <div id="dm-goal-pill" class="goal-pill">0%</div>
+      </div>
+      <div class="progress-container">
+        <div class="progress-track">
+          <div id="dm-progress-bar" class="progress-fill"></div>
+        </div>
+        <div class="progress-details">
+          <span id="dm-meta-info">Meta: 0 min/dia</span>
+          <span id="dm-progress-remain">Faltam: 0 min</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title">
+      Fontes
+      <button class="btn btn-sm btn-primary" onclick="goTo('screen-adicionar-fonte')">+ Adicionar</button>
+    </div>
+    <div id="dm-fontes-list"></div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       07 – EDITAR MATÉRIA
+  ════════════════════════════════════════ -->
+  <section id="screen-editar-materia" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-detalhe-materia'); renderDetalheMateria()">←</button>
+      <h1>Editar matéria</h1>
+    </div>
+    <div class="form-group">
+      <label>Nome da matéria</label>
+      <input type="text" id="em-nome" placeholder="Nome da matéria">
+    </div>
+    <div class="form-group">
+      <label>Meta diária (minutos)</label>
+      <input type="number" id="em-meta" placeholder="ex: 30" min="0">
+    </div>
+    <div class="checkbox-group">
+      <input type="checkbox" id="em-conta-meta">
+      <label for="em-conta-meta">Conta para a meta diária</label>
+    </div>
+    <button class="btn btn-primary mb-16" onclick="guardarEdicaoMateria()">Guardar alterações</button>
+    <button class="btn btn-danger" onclick="confirmarApagarMateria()">🗑 Apagar matéria</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       07b – CONFIRMAR APAGAR MATÉRIA
+  ════════════════════════════════════════ -->
+  <section id="screen-confirmar-apagar-materia" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-editar-materia')">←</button>
+      <h1>Apagar matéria</h1>
+    </div>
+    <p class="text-muted mb-16">Tens a certeza que queres apagar esta matéria? Todas as fontes e sessões associadas serão apagadas. Esta ação não se pode desfazer.</p>
+    <button class="btn btn-danger mb-16" onclick="apagarMateria()">Sim, apagar</button>
+    <button class="btn btn-ghost" onclick="goTo('screen-editar-materia')">Cancelar</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       08 – ADICIONAR FONTE
+  ════════════════════════════════════════ -->
+  <section id="screen-adicionar-fonte" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-detalhe-materia')">←</button>
+      <h1>Adicionar fonte</h1>
+    </div>
+    <div class="form-group">
+      <label>Nome da fonte</label>
+      <input type="text" id="af-nome" placeholder="ex: Capítulo 1, Vídeo aula...">
+    </div>
+    <div class="form-group">
+      <label>Tipo</label>
+      <select id="af-tipo">
+        <option value="Livro físico">Livro físico</option>
+        <option value="Hotmart">Hotmart</option>
+        <option value="YouTube">YouTube</option>
+        <option value="Audiolivro">Audiolivro</option>
+        <option value="Outro">Outro</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Link (opcional)</label>
+      <input type="url" id="af-link" placeholder="https://...">
+    </div>
+    <div class="form-group">
+      <label>Ponto de paragem</label>
+      <input type="text" id="af-ponto" placeholder="ex: Pág. 42, minuto 1:30...">
+    </div>
+    <button class="btn btn-primary" onclick="adicionarFonte()">Guardar</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       09 – EDITAR FONTE
+  ════════════════════════════════════════ -->
+  <section id="screen-editar-fonte" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-detalhe-materia')">←</button>
+      <h1>Editar fonte</h1>
+    </div>
+    <div class="form-group">
+      <label>Nome da fonte</label>
+      <input type="text" id="ef-nome">
+    </div>
+    <div class="form-group">
+      <label>Tipo</label>
+      <select id="ef-tipo">
+        <option value="Livro físico">Livro físico</option>
+        <option value="Hotmart">Hotmart</option>
+        <option value="YouTube">YouTube</option>
+        <option value="Audiolivro">Audiolivro</option>
+        <option value="Outro">Outro</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Link (opcional)</label>
+      <input type="url" id="ef-link">
+    </div>
+    <div class="form-group">
+      <label>Ponto de paragem</label>
+      <input type="text" id="ef-ponto">
+    </div>
+    <button class="btn btn-primary mb-16" onclick="guardarEdicaoFonte()">Guardar alterações</button>
+    <button class="btn btn-danger" onclick="confirmarApagarFonte()">🗑 Apagar fonte</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       09b – CONFIRMAR APAGAR FONTE
+  ════════════════════════════════════════ -->
+  <section id="screen-confirmar-apagar-fonte" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-editar-fonte')">←</button>
+      <h1>Apagar fonte</h1>
+    </div>
+    <p class="text-muted mb-16">Tens a certeza que queres apagar esta fonte? Esta ação não se pode desfazer.</p>
+    <button class="btn btn-danger mb-16" onclick="apagarFonte()">Sim, apagar</button>
+    <button class="btn btn-ghost" onclick="goTo('screen-editar-fonte')">Cancelar</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       10 – CRONÓMETRO
+  ════════════════════════════════════════ -->
+  <section id="screen-cronometro" class="screen">
+    <div class="page-header">
+      <h1>A estudar</h1>
+    </div>
+    <div class="timer-info">
+      <div class="label">Matéria</div>
+      <div class="value" id="cron-materia">—</div>
+    </div>
+    <div class="timer-info">
+      <div class="label">Fonte</div>
+      <div class="value" id="cron-fonte">—</div>
+    </div>
+    <div class="timer-info" id="cron-ponto-wrap">
+      <div class="label">Ponto de paragem anterior</div>
+      <div class="value" id="cron-ponto">—</div>
+    </div>
+    <div class="timer-display" id="cron-timer">00:00:00</div>
+    <div class="btn-group">
+      <button class="btn btn-secondary" id="cron-btn-link" onclick="abrirFonte()" style="display:none">🔗 Abrir fonte</button>
+      <button class="btn btn-primary" onclick="terminarSessao()">✅ Terminar sessão</button>
+      <button class="btn btn-secondary" onclick="sairSemTerminar()">⏸ Pausar / Sair (voltar mais tarde)</button>
+      <button class="btn btn-ghost" onclick="cancelarSessaoEmCurso(currentSessaoId)">✕ Descartar esta sessão</button>
+    </div>
+    <div class="divider"></div>
+    <div class="form-group">
+      <label>O que aprendi</label>
+      <textarea id="cron-aprendi" placeholder="Notas do que aprendeste..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Dúvidas</label>
+      <textarea id="cron-duvidas" placeholder="Dúvidas para esclarecer..."></textarea>
+    </div>
+    <button class="btn btn-ghost" onclick="guardarNotasCron()">💾 Guardar notas</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       11 – REFLEXÃO
+  ════════════════════════════════════════ -->
+  <section id="screen-reflexao" class="screen">
+    <div class="page-header">
+      <h1>Reflexão da sessão</h1>
+    </div>
+    <div class="timer-info">
+      <div class="label">Matéria · Fonte</div>
+      <div class="value" id="ref-info">—</div>
+    </div>
+    <div class="timer-info">
+      <div class="label">Duração</div>
+      <div class="value" id="ref-duracao">0 min</div>
+    </div>
+    <div class="form-group">
+      <label>Resumo (opcional)</label>
+      <textarea id="ref-resumo" placeholder="Resume a sessão..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>O que aprendi</label>
+      <textarea id="ref-aprendi" placeholder="O que ficou claro..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Dúvidas</label>
+      <textarea id="ref-duvidas" placeholder="O que preciso de rever..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Ponto de paragem</label>
+      <input type="text" id="ref-ponto" placeholder="Onde ficaste...">
+    </div>
+    <button class="btn btn-primary" onclick="guardarReflexao()">Guardar reflexão</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       12 – SESSÃO CONCLUÍDA
+  ════════════════════════════════════════ -->
+  <section id="screen-sessao-concluida" class="screen success-screen">
+    <div class="success-emoji">🎉</div>
+    <div class="success-title">Sessão concluída!</div>
+    <div class="success-min"><span id="sc-minutos">0</span> min</div>
+    <p class="text-muted" id="sc-info">Óptimo trabalho!</p>
+    <button class="btn btn-primary mt-24" style="width:100%" onclick="goTo('screen-home'); renderHome()">Voltar ao início</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       13 – HISTÓRICO
+  ════════════════════════════════════════ -->
+  <section id="screen-historico" class="screen">
+    <div class="page-header">
+      <h1>Histórico</h1>
+      <button class="btn btn-sm btn-ghost btn-icon" onclick="toggleTheme()" title="Alternar tema">🌓</button>
+    </div>
+
+    <!-- Calendário interativo -->
+    <div class="calendar-card">
+      <div class="calendar-header">
+        <button class="calendar-nav-btn" onclick="prevMonth()">‹</button>
+        <div class="calendar-title" id="cal-month-title">Mês Ano</div>
+        <button class="calendar-nav-btn" onclick="nextMonth()">›</button>
+      </div>
+      <div class="calendar-weekdays">
+        <span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span><span>Dom</span>
+      </div>
+      <div class="calendar-grid" id="cal-days-grid"></div>
+    </div>
+
+    <!-- Banner do dia selecionado -->
+    <div id="cal-selected-banner" style="display:none"></div>
+
+    <div class="search-box">
+      <span>🔍</span>
+      <input type="text" id="hist-search" placeholder="Pesquisar matéria, fonte, resumo..." oninput="renderHistorico()">
+    </div>
+    <div id="historico-list"></div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       14 – DETALHE DA SESSÃO
+  ════════════════════════════════════════ -->
+  <section id="screen-detalhe-sessao" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-historico'); renderHistorico()">←</button>
+      <h1>Detalhe da sessão</h1>
+      <button class="btn btn-sm btn-ghost" onclick="prepararEdicaoSessao()">✏️</button>
+    </div>
+    <div id="detalhe-sessao-content"></div>
+    <button class="btn btn-secondary mt-16" onclick="prepararCopiarSessao()">📋 Copiar resumo</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       15 – ESTATÍSTICAS (placeholder)
+  ════════════════════════════════════════ -->
+  <section id="screen-estatisticas" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-home')">←</button>
+      <h1>Estatísticas</h1>
+    </div>
+    <div class="empty-state">
+      <div class="empty-icon">📊</div>
+      <p>Em breve!</p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       16 – SESSÃO MANUAL
+  ════════════════════════════════════════ -->
+  <section id="screen-sessao-manual" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-home')">←</button>
+      <h1>Sessão manual</h1>
+    </div>
+    <div class="form-group">
+      <label>Hora de início</label>
+      <input type="datetime-local" id="sm-inicio">
+    </div>
+    <div class="form-group">
+      <label>Hora de fim</label>
+      <input type="datetime-local" id="sm-fim">
+    </div>
+    <div class="form-group">
+      <label>Matéria</label>
+      <select id="sm-materia" onchange="renderFontesManual()">
+        <option value="">Seleciona uma matéria</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Fonte</label>
+      <select id="sm-fonte">
+        <option value="">Seleciona uma fonte</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Resumo</label>
+      <textarea id="sm-resumo" placeholder="O que estudaste..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>O que aprendi</label>
+      <textarea id="sm-aprendi" placeholder="Aprendizagens..."></textarea>
+    </div>
+    <div class="form-group">
+      <label>Dúvidas</label>
+      <textarea id="sm-duvidas" placeholder="Dúvidas..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="guardarSessaoManual()">Guardar sessão</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       17 – DEFINIÇÕES
+  ════════════════════════════════════════ -->
+  <section id="screen-definicoes" class="screen">
+    <div class="page-header">
+      <h1>Definições</h1>
+    </div>
+    <div class="card" onclick="toggleTheme()">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div class="card-title">🌓 Modo Escuro / Claro</div>
+          <div class="card-sub" id="theme-status-lbl">Tema atual: Claro</div>
+        </div>
+        <span style="font-size:22px" id="theme-status-icon">☀️</span>
+      </div>
+    </div>
+    <div class="card" onclick="goTo('screen-perfil')">
+      <div class="card-title">👤 Perfil</div>
+      <div class="card-sub">Editar nome e email</div>
+    </div>
+    <div class="card" onclick="goTo('screen-metas')">
+      <div class="card-title">🎯 Metas diárias</div>
+      <div class="card-sub">Gerir metas de estudo</div>
+    </div>
+    <div class="card" onclick="goTo('screen-conta')">
+      <div class="card-title">🔐 Conta</div>
+      <div class="card-sub">Terminar sessão ou apagar conta</div>
+    </div>
+
+    <div class="divider"></div>
+    <div class="section-title">Dados & Cópia de Segurança</div>
+
+    <div class="card" onclick="descarregarBackup()">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div class="card-title">📥 Descarregar Backup (JSON)</div>
+          <div class="card-sub">Guarda um ficheiro com todos os teus dados</div>
+        </div>
+        <span style="font-size:22px">💾</span>
+      </div>
+    </div>
+
+    <div class="card" onclick="document.getElementById('backup-file-input').click()">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div class="card-title">📤 Restaurar Backup</div>
+          <div class="card-sub">Importa dados de um ficheiro JSON anterior</div>
+        </div>
+        <span style="font-size:22px">📂</span>
+      </div>
+    </div>
+    <input type="file" id="backup-file-input" accept=".json" style="display:none" onchange="restaurarBackup(event)">
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       18 – PERFIL
+  ════════════════════════════════════════ -->
+  <section id="screen-perfil" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-definicoes')">←</button>
+      <h1>Perfil</h1>
+    </div>
+    <div class="form-group">
+      <label>Nome completo</label>
+      <input type="text" id="pf-nome">
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="pf-email">
+    </div>
+    <button class="btn btn-primary" onclick="guardarPerfil()">Guardar</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       19 – METAS DIÁRIAS
+  ════════════════════════════════════════ -->
+  <section id="screen-metas" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-definicoes')">←</button>
+      <h1>Metas diárias</h1>
+    </div>
+    <div class="stats-bar" style="margin-bottom:20px">
+      <h2>Meta diária total</h2>
+      <div class="big-num"><span id="metas-total">0</span> min</div>
+    </div>
+    <div id="metas-list"></div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       20 – NOTIFICAÇÕES (placeholder)
+  ════════════════════════════════════════ -->
+  <section id="screen-notificacoes" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-definicoes')">←</button>
+      <h1>Notificações</h1>
+    </div>
+    <div class="empty-state">
+      <div class="empty-icon">🔔</div>
+      <p>Em breve!</p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       21 – CONTA
+  ════════════════════════════════════════ -->
+  <section id="screen-conta" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-definicoes')">←</button>
+      <h1>Conta</h1>
+    </div>
+    <button class="btn btn-secondary mb-16" onclick="terminarSessaoUser()">🚪 Terminar sessão</button>
+    <div class="divider"></div>
+    <p class="text-muted mb-16">Apagar conta remove todos os teus dados permanentemente.</p>
+    <button class="btn btn-danger" onclick="confirmarApagarConta()">🗑 Apagar conta</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       22 – EDITAR SESSÃO
+  ════════════════════════════════════════ -->
+  <section id="screen-editar-sessao" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-detalhe-sessao')">←</button>
+      <h1>Editar sessão</h1>
+    </div>
+    <div class="form-group">
+      <label>Hora de início</label>
+      <input type="datetime-local" id="es-inicio">
+    </div>
+    <div class="form-group">
+      <label>Hora de fim</label>
+      <input type="datetime-local" id="es-fim">
+    </div>
+    <div class="form-group">
+      <label>Resumo</label>
+      <textarea id="es-resumo"></textarea>
+    </div>
+    <div class="form-group">
+      <label>O que aprendi</label>
+      <textarea id="es-aprendi"></textarea>
+    </div>
+    <div class="form-group">
+      <label>Dúvidas</label>
+      <textarea id="es-duvidas"></textarea>
+    </div>
+    <button class="btn btn-primary mb-16" onclick="guardarEdicaoSessao()">Guardar alterações</button>
+    <button class="btn btn-danger" onclick="confirmarApagarSessao()">🗑 Apagar sessão</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       22b – CONFIRMAR APAGAR SESSÃO
+  ════════════════════════════════════════ -->
+  <section id="screen-confirmar-apagar-sessao" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-editar-sessao')">←</button>
+      <h1>Apagar sessão</h1>
+    </div>
+    <p class="text-muted mb-16">Esta sessão vai ser apagada do histórico. Esta ação não se pode desfazer.</p>
+    <button class="btn btn-danger mb-16" onclick="apagarSessao()">Sim, apagar</button>
+    <button class="btn btn-ghost" onclick="goTo('screen-editar-sessao')">Cancelar</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       23 – COPIAR SESSÃO
+  ════════════════════════════════════════ -->
+  <section id="screen-copiar-sessao" class="screen">
+    <div class="page-header">
+      <button class="back-btn" onclick="goTo('screen-detalhe-sessao')">←</button>
+      <h1>Copiar resumo</h1>
+    </div>
+    <p class="text-muted mb-16">Seleciona e copia o texto abaixo:</p>
+    <div class="form-group">
+      <textarea id="copiar-texto" style="min-height:260px; font-family: monospace; font-size:13px"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="copiarTexto()">📋 Copiar para a área de transferência</button>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       BARRA DE NAVEGAÇÃO INFERIOR
+  ════════════════════════════════════════ -->
+  <nav class="bottom-nav" id="bottom-nav" style="display:none">
+    <button id="nav-home" onclick="goTo('screen-home'); renderHome()">
+      <span class="nav-icon">📚</span>
+      Início
+    </button>
+    <button id="nav-hist" onclick="goTo('screen-historico'); renderHistorico()">
+      <span class="nav-icon">📋</span>
+      Histórico
+    </button>
+    <button id="nav-defs" onclick="goTo('screen-definicoes')">
+      <span class="nav-icon">⚙️</span>
+      Definições
+    </button>
+  </nav>
+
+</div><!-- /.app -->
+
+<script src="app.js"></script>
+</body>
+</html>
