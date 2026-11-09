@@ -45,16 +45,60 @@ function toggleTheme() {
   toast(`Modo ${next === 'dark' ? 'Escuro' : 'Claro'} ativado!`);
 }
 
+// ── CONFIGURAÇÃO FIREBASE & NUVEM ────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyAgpNAVOxF-uzBXwf9Vtb-AjUShE1sT_x0",
+  authDomain: "estudapp-bf8a1.firebaseapp.com",
+  projectId: "estudapp-bf8a1",
+  storageBucket: "estudapp-bf8a1.firebasestorage.app",
+  messagingSenderId: "677838210187",
+  appId: "1:677838210187:web:e5cb5105e16a03ac8f408e"
+};
+
+let auth = null;
+let db = null;
+let currentUserUid = null;
+let cloudSyncTimeout = null;
+
+function syncToCloud() {
+  if (!db || !currentUserUid) return;
+  clearTimeout(cloudSyncTimeout);
+  cloudSyncTimeout = setTimeout(() => {
+    const payload = {
+      user: getUser(),
+      subjects: getMaterias(),
+      sources: getFontes(),
+      sessions: getSessoes(),
+      theme: localStorage.getItem('theme') || 'light',
+      updated_at: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    db.collection('users').doc(currentUserUid).set(payload, { merge: true })
+      .catch(err => console.error("Erro sincronização nuvem:", err));
+  }, 400);
+}
+
 // ── HELPERS – localStorage ──────────────────────────────
 function getUser()     { return JSON.parse(localStorage.getItem('user') || 'null'); }
 function getMaterias() { return JSON.parse(localStorage.getItem('subjects') || '[]'); }
 function getFontes()   { return JSON.parse(localStorage.getItem('sources')  || '[]'); }
 function getSessoes()  { return JSON.parse(localStorage.getItem('sessions') || '[]'); }
 
-function saveUser(u)  { localStorage.setItem('user', JSON.stringify(u)); }
-function saveMaterias(arr) { localStorage.setItem('subjects', JSON.stringify(arr)); }
-function saveFontes(arr)   { localStorage.setItem('sources',  JSON.stringify(arr)); }
-function saveSessoes(arr)  { localStorage.setItem('sessions', JSON.stringify(arr)); }
+function saveUser(u) {
+  localStorage.setItem('user', JSON.stringify(u));
+  syncToCloud();
+}
+function saveMaterias(arr) {
+  localStorage.setItem('subjects', JSON.stringify(arr));
+  syncToCloud();
+}
+function saveFontes(arr) {
+  localStorage.setItem('sources',  JSON.stringify(arr));
+  syncToCloud();
+}
+function saveSessoes(arr) {
+  localStorage.setItem('sessions', JSON.stringify(arr));
+  syncToCloud();
+}
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
@@ -143,6 +187,54 @@ function goTo(screenId) {
 // ── INICIALIZAÇÃO ──────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   initTheme();
+  inicializarFirebase();
+});
+
+let cloudUnsubscribe = null;
+
+function inicializarFirebase() {
+  if (typeof firebase !== 'undefined') {
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      auth = firebase.auth();
+      db = firebase.firestore();
+
+      // Ativar persistência offline (opcional)
+      db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+        console.warn("Persistência offline:", err.code);
+      });
+
+      auth.onAuthStateChanged(async (firebaseUser) => {
+        if (firebaseUser) {
+          currentUserUid = firebaseUser.uid;
+          await carregarDadosDaNuvem(currentUserUid);
+          iniciarEscutaNuvem(currentUserUid);
+          goTo('screen-home');
+          renderHome();
+        } else {
+          currentUserUid = null;
+          if (cloudUnsubscribe) { cloudUnsubscribe(); cloudUnsubscribe = null; }
+          const localUser = getUser();
+          if (localUser) {
+            goTo('screen-home');
+            renderHome();
+          } else {
+            goTo('screen-inicio');
+          }
+        }
+      });
+    } catch (e) {
+      console.error("Erro inicialização Firebase:", e);
+      fallbackLocalInit();
+    }
+  } else {
+    fallbackLocalInit();
+  }
+}
+
+function fallbackLocalInit() {
   const user = getUser();
   if (user) {
     goTo('screen-home');
@@ -150,12 +242,60 @@ window.addEventListener('DOMContentLoaded', () => {
   } else {
     goTo('screen-inicio');
   }
-});
+}
+
+async function carregarDadosDaNuvem(uid) {
+  if (!db || !uid) return;
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    if (doc.exists) {
+      const data = doc.data();
+      if (data.user)     localStorage.setItem('user', JSON.stringify(data.user));
+      if (data.subjects) localStorage.setItem('subjects', JSON.stringify(data.subjects));
+      if (data.sources)  localStorage.setItem('sources', JSON.stringify(data.sources));
+      if (data.sessions) localStorage.setItem('sessions', JSON.stringify(data.sessions));
+      if (data.theme)    applyTheme(data.theme);
+    } else {
+      // Se ainda não tem doc na nuvem mas tem local, migra dados locais para a nuvem
+      syncToCloud();
+    }
+  } catch (e) {
+    console.error("Erro ao carregar dados da nuvem:", e);
+  }
+}
+
+function iniciarEscutaNuvem(uid) {
+  if (!db || !uid) return;
+  if (cloudUnsubscribe) cloudUnsubscribe();
+
+  cloudUnsubscribe = db.collection('users').doc(uid).onSnapshot(doc => {
+    if (!doc.exists) return;
+    if (doc.metadata.hasPendingWrites) return; // ignora alterações feitas neste dispositivo
+
+    const data = doc.data();
+    if (data.user)     localStorage.setItem('user', JSON.stringify(data.user));
+    if (data.subjects) localStorage.setItem('subjects', JSON.stringify(data.subjects));
+    if (data.sources)  localStorage.setItem('sources', JSON.stringify(data.sources));
+    if (data.sessions) localStorage.setItem('sessions', JSON.stringify(data.sessions));
+    if (data.theme)    applyTheme(data.theme);
+
+    const activeScreen = document.querySelector('.screen.active');
+    if (activeScreen?.id === 'screen-home') {
+      renderHome();
+    } else if (activeScreen?.id === 'screen-detalhe-materia') {
+      renderDetalheMateria();
+    } else if (activeScreen?.id === 'screen-historico') {
+      renderHistorico();
+    }
+  }, err => {
+    console.warn("Snapshot error:", err);
+  });
+}
 
 // ══════════════════════════════════════════════════════
 //  02 – CRIAR CONTA
 // ══════════════════════════════════════════════════════
-function criarConta() {
+async function criarConta() {
   const nome     = document.getElementById('cc-nome').value.trim();
   const email    = document.getElementById('cc-email').value.trim();
   const password = document.getElementById('cc-password').value;
@@ -163,35 +303,131 @@ function criarConta() {
   if (!nome || !email || !password) { toast('Preenche todos os campos!'); return; }
   if (password.length < 6)          { toast('Password com mínimo 6 caracteres!'); return; }
 
-  const user = { name: nome, email, password, meta_total: 0, minutos_hoje: 0, dia_minutos: Date.now() };
-  saveUser(user);
+  const btn = document.querySelector('#screen-criar-conta button.btn-primary');
+  const txtOriginal = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'A criar conta na nuvem...'; }
 
-  document.getElementById('cc-nome').value = '';
-  document.getElementById('cc-email').value = '';
-  document.getElementById('cc-password').value = '';
+  if (auth) {
+    try {
+      const cred = await auth.createUserWithEmailAndPassword(email, password);
+      currentUserUid = cred.user.uid;
+      try { await cred.user.updateProfile({ displayName: nome }); } catch (e) {}
 
-  goTo('screen-home');
-  renderHome();
+      const newUser = {
+        name: nome,
+        email: email,
+        meta_total: 0,
+        minutos_hoje: 0,
+        dia_minutos: Date.now()
+      };
+      saveUser(newUser);
+
+      if (db) {
+        await db.collection('users').doc(currentUserUid).set({
+          user: newUser,
+          subjects: getMaterias(),
+          sources: getFontes(),
+          sessions: getSessoes(),
+          theme: localStorage.getItem('theme') || 'light',
+          created_at: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+
+      toast('Conta criada e sincronizada!');
+      iniciarEscutaNuvem(currentUserUid);
+
+      document.getElementById('cc-nome').value = '';
+      document.getElementById('cc-email').value = '';
+      document.getElementById('cc-password').value = '';
+
+      goTo('screen-home');
+      renderHome();
+    } catch (err) {
+      console.error(err);
+      let msg = 'Erro ao criar conta!';
+      if (err.code === 'auth/email-already-in-use') msg = 'Este email já está registado! Tenta entrar.';
+      else if (err.code === 'auth/invalid-email')   msg = 'Formato de email inválido!';
+      else if (err.code === 'auth/weak-password')   msg = 'A password é demasiado fraca (mín. 6 carateres)!';
+      toast(msg);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = txtOriginal; }
+    }
+  } else {
+    // Modo local (sem internet)
+    const user = { name: nome, email, password, meta_total: 0, minutos_hoje: 0, dia_minutos: Date.now() };
+    saveUser(user);
+    goTo('screen-home');
+    renderHome();
+  }
 }
 
 // ══════════════════════════════════════════════════════
 //  03 – ENTRAR
 // ══════════════════════════════════════════════════════
-function entrar() {
+async function entrar() {
   const email    = document.getElementById('en-email').value.trim();
   const password = document.getElementById('en-password').value;
-  const user     = getUser();
 
-  if (!user || user.email !== email || user.password !== password) {
-    toast('Email ou password incorretos!');
+  if (!email || !password) { toast('Preenche o email e password!'); return; }
+
+  const btn = document.querySelector('#screen-entrar button.btn-primary');
+  const txtOriginal = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'A entrar...'; }
+
+  if (auth) {
+    try {
+      const cred = await auth.signInWithEmailAndPassword(email, password);
+      currentUserUid = cred.user.uid;
+      toast('Sessão iniciada! A carregar os teus estudos...');
+
+      await carregarDadosDaNuvem(currentUserUid);
+      iniciarEscutaNuvem(currentUserUid);
+
+      document.getElementById('en-email').value = '';
+      document.getElementById('en-password').value = '';
+
+      goTo('screen-home');
+      renderHome();
+    } catch (err) {
+      console.error(err);
+      let msg = 'Email ou password incorretos!';
+      if (err.code === 'auth/user-not-found')    msg = 'Conta não encontrada! Verifica o email.';
+      else if (err.code === 'auth/wrong-password') msg = 'Password incorreta!';
+      else if (err.code === 'auth/invalid-email')  msg = 'Email inválido!';
+      else if (err.code === 'auth/too-many-requests') msg = 'Muitas tentativas falhadas. Tenta daqui a pouco.';
+      toast(msg);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = txtOriginal; }
+    }
+  } else {
+    // Modo local
+    const user = getUser();
+    if (!user || user.email !== email || user.password !== password) {
+      toast('Email ou password incorretos!');
+      return;
+    }
+    document.getElementById('en-email').value = '';
+    document.getElementById('en-password').value = '';
+    goTo('screen-home');
+    renderHome();
+  }
+}
+
+function recuperarPassword() {
+  const email = prompt('Escreve o teu email para receberes um link de recuperação de password:');
+  if (!email || !email.trim()) return;
+
+  if (!auth) {
+    toast('Funcionalidade indisponível offline.');
     return;
   }
 
-  document.getElementById('en-email').value = '';
-  document.getElementById('en-password').value = '';
-
-  goTo('screen-home');
-  renderHome();
+  auth.sendPasswordResetEmail(email.trim())
+    .then(() => toast('Email de recuperação enviado! Verifica a tua caixa de correio.'))
+    .catch(err => {
+      console.error(err);
+      toast('Não foi possível enviar o email. Verifica o endereço.');
+    });
 }
 
 // ══════════════════════════════════════════════════════
@@ -1334,12 +1570,21 @@ function updateMetaMateria(id) {
 }
 
 function terminarSessaoUser() {
-  if (!confirm('Tens a certeza que queres sair?')) return;
+  if (!confirm('Tens a certeza que queres terminar a sessão neste aparelho?')) return;
+  if (cloudUnsubscribe) { cloudUnsubscribe(); cloudUnsubscribe = null; }
+  currentUserUid = null;
   localStorage.removeItem('user');
   localStorage.removeItem('subjects');
   localStorage.removeItem('sources');
   localStorage.removeItem('sessions');
-  goTo('screen-inicio');
+  if (auth) {
+    auth.signOut().finally(() => {
+      goTo('screen-inicio');
+      toast('Sessão terminada.');
+    });
+  } else {
+    goTo('screen-inicio');
+  }
 }
 
 function confirmarApagarConta() {

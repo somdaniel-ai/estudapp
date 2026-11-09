@@ -65,6 +65,9 @@
       <input type="password" id="en-password" placeholder="A tua password">
     </div>
     <button class="btn btn-primary mt-8" onclick="entrar()">Entrar</button>
+    <p class="text-center text-muted mt-8">
+      <a href="#" onclick="recuperarPassword()" style="font-size:13px">Esqueceste-te da password?</a>
+    </p>
     <p class="text-center text-muted mt-16">
       Não tens conta? <a href="#" onclick="goTo('screen-criar-conta')">Criar conta</a>
     </p>
@@ -762,6 +765,11 @@
 
 </div><!-- /.app -->
 
-<script src="app.js?v=2"></script>
+<!-- Firebase SDKs (Compat para Web) -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+<script src="app.js?v=3"></script>
 </body>
 </html>
