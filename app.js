@@ -689,6 +689,8 @@ function iniciarEstudo(fonteId) {
   btnLink.style.display = fonte.link ? 'block' : 'none';
 
   sessionStartTime = novaSessao.hora_inicio;
+  lastPomodoroAlertBlock = 0;
+  metaAlertGiven = false;
   clearInterval(timerInterval);
   timerInterval = setInterval(updateTimer, 1000);
   updateTimer();
@@ -718,6 +720,8 @@ function retomarSessao(sessaoId) {
   btnLink.style.display = (fonte && fonte.link) ? 'block' : 'none';
 
   sessionStartTime = s.hora_inicio;
+  lastPomodoroAlertBlock = Math.floor(Math.floor((Date.now() - s.hora_inicio) / 1000) / (25 * 60));
+  metaAlertGiven = false;
   clearInterval(timerInterval);
   timerInterval = setInterval(updateTimer, 1000);
   updateTimer();
@@ -754,6 +758,41 @@ function updateTimer() {
   const s = elapsed % 60;
   document.getElementById('cron-timer').textContent =
     `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+  verificarAlertasEstudo(elapsed);
+}
+
+function verificarAlertasEstudo(elapsedSeconds) {
+  const cfg = getNotifSettings();
+  const minutosNaSessao = elapsedSeconds / 60;
+
+  // 1. Alerta Pomodoro (a cada 25 minutos contínuos)
+  if (cfg.pomodoro) {
+    const bloco25 = Math.floor(minutosNaSessao / 25);
+    if (bloco25 > 0 && bloco25 > lastPomodoroAlertBlock) {
+      lastPomodoroAlertBlock = bloco25;
+      dispararNotificacao(
+        '🍅 Intervalo Pomodoro!',
+        `Completaste ${bloco25 * 25} minutos de foco. Faz uma pausa de 5 minutos!`
+      );
+    }
+  }
+
+  // 2. Alerta de Meta Cumprida da Matéria
+  if (cfg.metaAtingida && !metaAlertGiven && currentMateriaId) {
+    const materias = getMaterias();
+    const materia = materias.find(x => x.id === currentMateriaId);
+    if (materia && materia.meta_diaria_min > 0) {
+      const totalHojeEstimado = getMinutosHoje(materia) + minutosNaSessao;
+      if (totalHojeEstimado >= materia.meta_diaria_min) {
+        metaAlertGiven = true;
+        dispararNotificacao(
+          '🎉 Meta Diária Atingida!',
+          `Parabéns! Atingiste a tua meta de ${materia.meta_diaria_min} min para ${materia.name}!`
+        );
+      }
+    }
+  }
 }
 
 function abrirFonte() {
@@ -1379,10 +1418,164 @@ function restaurarBackup(event) {
   reader.readAsText(file);
 }
 
+// ══════════════════════════════════════════════════════
+//  NOTIFICAÇÕES & SONS
+// ══════════════════════════════════════════════════════
+let lastPomodoroAlertBlock = 0;
+let metaAlertGiven = false;
+
+function getNotifSettings() {
+  const def = {
+    som: true,
+    vibrar: true,
+    pomodoro: true,
+    metaAtingida: true
+  };
+  return Object.assign(def, JSON.parse(localStorage.getItem('notif_settings') || '{}'));
+}
+
+function saveNotifSettings(cfg) {
+  localStorage.setItem('notif_settings', JSON.stringify(cfg));
+}
+
+function toggleNotifConfig(key, val) {
+  const cfg = getNotifSettings();
+  cfg[key] = val;
+  saveNotifSettings(cfg);
+}
+
+function renderNotificacoes() {
+  const cfg = getNotifSettings();
+  const toggleSom = document.getElementById('notif-toggle-som');
+  const toggleVib = document.getElementById('notif-toggle-vibrar');
+  const togglePomo = document.getElementById('notif-toggle-pomodoro');
+  const toggleMeta = document.getElementById('notif-toggle-meta');
+
+  if (toggleSom)  toggleSom.checked  = !!cfg.som;
+  if (toggleVib)  toggleVib.checked  = !!cfg.vibrar;
+  if (togglePomo) togglePomo.checked = !!cfg.pomodoro;
+  if (toggleMeta) toggleMeta.checked = !!cfg.metaAtingida;
+
+  // Atualizar estado de permissão do browser
+  const permStatus = document.getElementById('notif-perm-status');
+  const btnReq = document.getElementById('btn-request-notif');
+
+  if (!('Notification' in window)) {
+    if (permStatus) permStatus.textContent = 'Não suportado neste navegador';
+    if (btnReq) btnReq.style.display = 'none';
+  } else if (Notification.permission === 'granted') {
+    if (permStatus) permStatus.textContent = '✅ Ativadas com sucesso';
+    if (btnReq) {
+      btnReq.textContent = 'Ativo';
+      btnReq.className = 'btn btn-sm btn-ghost';
+      btnReq.disabled = true;
+    }
+  } else if (Notification.permission === 'denied') {
+    if (permStatus) permStatus.textContent = '❌ Bloqueadas nas definições';
+    if (btnReq) {
+      btnReq.textContent = 'Bloqueado';
+      btnReq.className = 'btn btn-sm btn-danger';
+      btnReq.disabled = true;
+    }
+  } else {
+    if (permStatus) permStatus.textContent = 'Por autorizar';
+    if (btnReq) {
+      btnReq.textContent = 'Ativar';
+      btnReq.className = 'btn btn-sm btn-primary';
+      btnReq.disabled = false;
+    }
+  }
+}
+
+function pedirPermissaoNotificacao() {
+  if (!('Notification' in window)) {
+    toast('O teu navegador não suporta notificações de sistema.');
+    return;
+  }
+
+  Notification.requestPermission().then(permission => {
+    renderNotificacoes();
+    if (permission === 'granted') {
+      toast('Notificações autorizadas com sucesso!');
+      tocarSomNotificacao();
+    } else {
+      toast('Permissão de notificações recusada.');
+    }
+  });
+}
+
+function tocarSomNotificacao() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+
+    const tocarNota = (frequencia, inicio, duracao) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(frequencia, ctx.currentTime + inicio);
+
+      gain.gain.setValueAtTime(0.001, ctx.currentTime + inicio);
+      gain.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + inicio + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + inicio + duracao);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(ctx.currentTime + inicio);
+      osc.stop(ctx.currentTime + inicio + duracao);
+    };
+
+    // Sino agradável de dois tons (estilo notificação moderna)
+    tocarNota(659.25, 0, 0.35);    // E5
+    tocarNota(880.00, 0.18, 0.55);  // A5
+  } catch (e) {
+    console.warn('Áudio não permitido ou erro:', e);
+  }
+}
+
+function dispararNotificacao(titulo, corpo) {
+  const cfg = getNotifSettings();
+
+  // 1. Som
+  if (cfg.som) {
+    tocarSomNotificacao();
+  }
+
+  // 2. Vibração (se no telemóvel)
+  if (cfg.vibrar && 'vibrate' in navigator) {
+    try { navigator.vibrate([200, 100, 200]); } catch (e) {}
+  }
+
+  // 3. Notificação no ecrã (Browser Notification ou Toast)
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(titulo, {
+        body: corpo,
+        icon: '📚'
+      });
+    } catch (e) {
+      toast(`${titulo} — ${corpo}`);
+    }
+  } else {
+    toast(`${titulo} — ${corpo}`);
+  }
+}
+
+function testarNotificacaoCompleta() {
+  dispararNotificacao(
+    'Teste de Notificação 📚',
+    'Excelente! O som e o alerta do EstudApp estão a funcionar perfeitamente!'
+  );
+}
+
 // ── Sobrescrever links de definições para preencher forms ──
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelector('.card[onclick="goTo(\'screen-perfil\')"]')
     ?.setAttribute('onclick', 'prepararPerfil()');
   document.querySelector('.card[onclick="goTo(\'screen-metas\')"]')
     ?.setAttribute('onclick', 'goTo(\'screen-metas\'); renderMetas()');
+  document.querySelector('.card[onclick*="screen-notificacoes"]')
+    ?.setAttribute('onclick', 'goTo(\'screen-notificacoes\'); renderNotificacoes()');
 });

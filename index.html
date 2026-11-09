@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EstudApp</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
 <div class="app">
@@ -515,6 +515,10 @@
       <div class="card-title">🎯 Metas diárias</div>
       <div class="card-sub">Gerir metas de estudo</div>
     </div>
+    <div class="card" onclick="goTo('screen-notificacoes'); renderNotificacoes()">
+      <div class="card-title">🔔 Notificações & Sons</div>
+      <div class="card-sub" id="notif-status-sub">Pomodoro, metas e aviso sonoro</div>
+    </div>
     <div class="card" onclick="goTo('screen-conta')">
       <div class="card-title">🔐 Conta</div>
       <div class="card-sub">Terminar sessão ou apagar conta</div>
@@ -580,17 +584,88 @@
   </section>
 
   <!-- ═══════════════════════════════════════
-       20 – NOTIFICAÇÕES (placeholder)
+       20 – NOTIFICAÇÕES & SONS
   ════════════════════════════════════════ -->
   <section id="screen-notificacoes" class="screen">
     <div class="page-header">
       <button class="back-btn" onclick="goTo('screen-definicoes')">←</button>
-      <h1>Notificações</h1>
+      <h1>Notificações & Sons</h1>
     </div>
-    <div class="empty-state">
-      <div class="empty-icon">🔔</div>
-      <p>Em breve!</p>
+
+    <!-- Permissão do Dispositivo -->
+    <div class="card" id="notif-perm-card">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div class="card-title">Permissão no Dispositivo</div>
+          <div class="card-sub" id="notif-perm-status">A verificar...</div>
+        </div>
+        <button class="btn btn-sm btn-primary" id="btn-request-notif" onclick="pedirPermissaoNotificacao()">Ativar</button>
+      </div>
     </div>
+
+    <div class="section-title mt-16">Alertas & Lembretes</div>
+
+    <!-- Som -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div class="card-title">🔊 Som de Alerta</div>
+          <div class="card-sub">Tocar aviso sonoro (sino) nas notificações</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="notif-toggle-som" onchange="toggleNotifConfig('som', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="card-actions mt-8">
+        <button class="btn btn-sm btn-ghost" onclick="tocarSomNotificacao()">▶ Ouvir som de teste</button>
+      </div>
+    </div>
+
+    <!-- Vibração -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div class="card-title">📳 Vibração (Telemóvel)</div>
+          <div class="card-sub">Vibrar ao terminar intervalos ou metas</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="notif-toggle-vibrar" onchange="toggleNotifConfig('vibrar', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Pomodoro -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div class="card-title">🍅 Alerta Pomodoro (25 min)</div>
+          <div class="card-sub">Avisar a cada 25 minutos para fazer uma pausa</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="notif-toggle-pomodoro" onchange="toggleNotifConfig('pomodoro', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Meta Cumprida -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <div>
+          <div class="card-title">🎉 Meta da Matéria Atingida</div>
+          <div class="card-sub">Avisar assim que cumprires a meta no cronómetro</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="notif-toggle-meta" onchange="toggleNotifConfig('metaAtingida', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+    <button class="btn btn-secondary" onclick="testarNotificacaoCompleta()">🔔 Testar Notificação Completa</button>
   </section>
 
   <!-- ═══════════════════════════════════════
@@ -687,6 +762,6 @@
 
 </div><!-- /.app -->
 
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
