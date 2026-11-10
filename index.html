@@ -131,6 +131,9 @@
       <button class="btn btn-sm btn-primary" onclick="goTo('screen-adicionar-materia')">+ Adicionar</button>
     </div>
     <div id="home-materias-list"></div>
+
+    <div class="divider"></div>
+    <button class="btn btn-ghost" style="width:100%" onclick="prepararSessaoManual()">✏️ Adicionar sessão manualmente</button>
   </section>
 
   <!-- ═══════════════════════════════════════
@@ -378,7 +381,9 @@
       <label>Ponto de paragem</label>
       <input type="text" id="ref-ponto" placeholder="Onde ficaste...">
     </div>
-    <button class="btn btn-primary" onclick="guardarReflexao()">Guardar reflexão</button>
+    <button class="btn btn-primary mb-16" onclick="guardarReflexao()">Guardar reflexão</button>
+    <button class="btn btn-ghost mb-16" onclick="guardarSemReflexao()">⏭ Guardar sem reflexão</button>
+    <button class="btn btn-secondary" onclick="voltarDaReflexao()">← Voltar ao cronómetro</button>
   </section>
 
   <!-- ═══════════════════════════════════════
@@ -770,6 +775,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

@@ -1064,56 +1064,84 @@ function sairSemTerminar() {
 }
 
 function terminarSessao() {
-  clearInterval(timerInterval);
-  const horaFim = Date.now();
+  try {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    const horaFim = Date.now();
 
-  const sessoes = getSessoes();
-  const idx = sessoes.findIndex(s => s.id === currentSessaoId);
-  if (idx === -1) return;
+    if (!currentSessaoId) {
+      toast('Erro: sessão não encontrada. A voltar ao início...');
+      goTo('screen-home');
+      renderHome();
+      return;
+    }
 
-  const s = sessoes[idx];
-  s.hora_fim = horaFim;
-  s.estado   = 'Terminada';
-  s.minutos  = calcMinutos(s.hora_inicio, horaFim);
-  s.minutos_contados = s.conta_na_meta ? s.minutos : 0;
-  s.aprendi  = document.getElementById('cron-aprendi').value;
-  s.duvidas  = document.getElementById('cron-duvidas').value;
-  saveSessoes(sessoes);
+    const sessoes = getSessoes();
+    const idx = sessoes.findIndex(s => s.id === currentSessaoId);
+    if (idx === -1) {
+      toast('Erro: sessão não encontrada. A voltar ao início...');
+      goTo('screen-home');
+      renderHome();
+      return;
+    }
 
-  // Atualizar fonte
-  const fontes = getFontes();
-  const fIdx = fontes.findIndex(f => f.id === currentFonteId);
-  if (fIdx !== -1) {
-    fontes[fIdx].ultimo_estudo = horaFim;
-    atualizarContador(fontes[fIdx], s.minutos);
-    saveFontes(fontes);
+    const s = sessoes[idx];
+    s.hora_fim = horaFim;
+    s.estado   = 'Terminada';
+    s.minutos  = calcMinutos(s.hora_inicio, horaFim);
+    s.minutos_contados = s.conta_na_meta ? s.minutos : 0;
+    s.aprendi  = document.getElementById('cron-aprendi').value;
+    s.duvidas  = document.getElementById('cron-duvidas').value;
+    saveSessoes(sessoes);
+
+    // Atualizar fonte
+    try {
+      const fontes = getFontes();
+      const fIdx = fontes.findIndex(f => f.id === currentFonteId);
+      if (fIdx !== -1) {
+        fontes[fIdx].ultimo_estudo = horaFim;
+        atualizarContador(fontes[fIdx], s.minutos);
+        saveFontes(fontes);
+      }
+    } catch(e) { console.warn('Erro ao atualizar fonte:', e); }
+
+    // Atualizar matéria
+    try {
+      const materias = getMaterias();
+      const mIdx = materias.findIndex(m => m.id === currentMateriaId);
+      if (mIdx !== -1) {
+        atualizarContador(materias[mIdx], s.minutos);
+        saveMaterias(materias);
+      }
+    } catch(e) { console.warn('Erro ao atualizar matéria:', e); }
+
+    // Atualizar user
+    try {
+      const user = getUser();
+      if (user) {
+        atualizarContador(user, s.minutos_contados);
+        saveUser(user);
+      }
+    } catch(e) { console.warn('Erro ao atualizar utilizador:', e); }
+
+    // Ir para reflexão
+    document.getElementById('ref-info').textContent = `${s.nome_materia} · ${s.nome_fonte}`;
+    document.getElementById('ref-duracao').textContent = `${formatMin(s.minutos)} min`;
+    document.getElementById('ref-resumo').value  = s.resumo || '';
+    document.getElementById('ref-aprendi').value = s.aprendi || '';
+    document.getElementById('ref-duvidas').value = s.duvidas || '';
+    try {
+      const fonte = getFontes().find(f => f.id === currentFonteId);
+      document.getElementById('ref-ponto').value = fonte ? (fonte.ponto_paragem || '') : '';
+    } catch(e) { document.getElementById('ref-ponto').value = ''; }
+
+    goTo('screen-reflexao');
+
+  } catch(err) {
+    console.error('Erro em terminarSessao:', err);
+    toast('Ocorreu um erro. A guardar e a voltar ao início...');
+    try { goTo('screen-home'); renderHome(); } catch(e) {}
   }
-
-  // Atualizar matéria
-  const materias = getMaterias();
-  const mIdx = materias.findIndex(m => m.id === currentMateriaId);
-  if (mIdx !== -1) {
-    atualizarContador(materias[mIdx], s.minutos);
-    saveMaterias(materias);
-  }
-
-  // Atualizar user
-  const user = getUser();
-  if (user) {
-    atualizarContador(user, s.minutos_contados);
-    saveUser(user);
-  }
-
-  // Ir para reflexão
-  document.getElementById('ref-info').textContent = `${s.nome_materia} · ${s.nome_fonte}`;
-  document.getElementById('ref-duracao').textContent = `${formatMin(s.minutos)} min`;
-  document.getElementById('ref-resumo').value  = s.resumo || '';
-  document.getElementById('ref-aprendi').value = s.aprendi || '';
-  document.getElementById('ref-duvidas').value = s.duvidas || '';
-  const fonte = getFontes().find(f => f.id === currentFonteId);
-  document.getElementById('ref-ponto').value   = fonte ? (fonte.ponto_paragem || '') : '';
-
-  goTo('screen-reflexao');
 }
 
 // ══════════════════════════════════════════════════════
@@ -1147,8 +1175,104 @@ function guardarReflexao() {
   goTo('screen-sessao-concluida');
 }
 
-// ══════════════════════════════════════════════════════
-//  13 – HISTÓRICO & CALENDÁRIO
+// Guardar sessão sem preencher reflexão (ir direto ao ecrã de conclusão)
+function guardarSemReflexao() {
+  const sessoes = getSessoes();
+  const idx = sessoes.findIndex(s => s.id === currentSessaoId);
+  if (idx === -1) { goTo('screen-home'); renderHome(); return; }
+
+  // Guardar o ponto de paragem que estiver preenchido
+  const pontoVal = document.getElementById('ref-ponto').value;
+  sessoes[idx].ponto_paragem = pontoVal;
+  saveSessoes(sessoes);
+
+  // Atualizar ponto de paragem da fonte
+  const fontes = getFontes();
+  const fIdx = fontes.findIndex(f => f.id === currentFonteId);
+  if (fIdx !== -1) {
+    fontes[fIdx].ponto_paragem = pontoVal;
+    saveFontes(fontes);
+  }
+
+  const s = sessoes[idx];
+  document.getElementById('sc-minutos').textContent = formatMin(s.minutos);
+  document.getElementById('sc-info').textContent = `${s.nome_materia} · ${s.nome_fonte}`;
+  goTo('screen-sessao-concluida');
+}
+
+// Voltar ao cronómetro a partir da reflexão (cancela o "terminar")
+function voltarDaReflexao() {
+  if (!currentSessaoId) { goTo('screen-home'); renderHome(); return; }
+
+  // Repor estado da sessão para "Em curso"
+  const sessoes = getSessoes();
+  const idx = sessoes.findIndex(s => s.id === currentSessaoId);
+  if (idx === -1) { goTo('screen-home'); renderHome(); return; }
+
+  const s = sessoes[idx];
+
+  // Reverter contadores que foram somados em terminarSessao()
+  const minRestaurar = s.minutos || 0;
+
+  // Reverter fonte
+  try {
+    const fontes = getFontes();
+    const fIdx = fontes.findIndex(f => f.id === currentFonteId);
+    if (fIdx !== -1) {
+      fontes[fIdx].minutos_total = Math.max(0, (fontes[fIdx].minutos_total || 0) - minRestaurar);
+      fontes[fIdx].minutos_hoje  = Math.max(0, (fontes[fIdx].minutos_hoje  || 0) - minRestaurar);
+      saveFontes(fontes);
+    }
+  } catch(e) {}
+
+  // Reverter matéria
+  try {
+    const materias = getMaterias();
+    const mIdx = materias.findIndex(m => m.id === currentMateriaId);
+    if (mIdx !== -1) {
+      materias[mIdx].minutos_total = Math.max(0, (materias[mIdx].minutos_total || 0) - minRestaurar);
+      materias[mIdx].minutos_hoje  = Math.max(0, (materias[mIdx].minutos_hoje  || 0) - minRestaurar);
+      saveMaterias(materias);
+    }
+  } catch(e) {}
+
+  // Reverter user
+  try {
+    const user = getUser();
+    if (user) {
+      const minContados = s.minutos_contados || 0;
+      user.minutos_total = Math.max(0, (user.minutos_total || 0) - minContados);
+      user.minutos_hoje  = Math.max(0, (user.minutos_hoje  || 0) - minContados);
+      saveUser(user);
+    }
+  } catch(e) {}
+
+  // Repor sessão como "Em curso" e recalcular hora_inicio para retomar
+  s.estado     = 'Em curso';
+  s.hora_fim   = null;
+  s.minutos    = 0;
+  s.minutos_contados = 0;
+  // Avançar hora_inicio para compensar o tempo que passou desde que "terminou"
+  s.hora_inicio = Date.now() - (minRestaurar * 60000);
+  saveSessoes(sessoes);
+
+  // Reabrir cronómetro
+  sessionStartTime = s.hora_inicio;
+  document.getElementById('cron-materia').textContent = s.nome_materia || '—';
+  document.getElementById('cron-fonte').textContent   = s.nome_fonte   || '—';
+  document.getElementById('cron-aprendi').value = s.aprendi || '';
+  document.getElementById('cron-duvidas').value = s.duvidas || '';
+
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+    document.getElementById('cron-timer').textContent = formatTime(elapsed);
+    verificarAlertasEstudo(elapsed);
+  }, 1000);
+
+  goTo('screen-cronometro');
+  toast('Sessão retomada!');
+}
 // ══════════════════════════════════════════════════════
 function prevMonth() {
   calDate.setMonth(calDate.getMonth() - 1);
