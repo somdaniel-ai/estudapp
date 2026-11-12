@@ -151,9 +151,32 @@ function atualizarContador(record, minutos) {
   return record;
 }
 
-function getMinutosHoje(record) {
-  if (!record.dia_minutos || record.dia_minutos < startOfToday()) return 0;
-  return record.minutos_hoje || 0;
+// Os minutos de hoje são sempre calculados a partir das sessões terminadas,
+// por isso apagar ou editar uma sessão reflete-se automaticamente nas contagens.
+function sessoesTerminadasHoje() {
+  return getSessoes().filter(s => s.estado === 'Terminada' && isToday(s.hora_inicio));
+}
+
+function somaMinutos(sessoes) {
+  return Math.round(sessoes.reduce((t, s) => t + (s.minutos || 0), 0) * 10) / 10;
+}
+
+function minutosHojeMateria(materiaId) {
+  return somaMinutos(sessoesTerminadasHoje().filter(s => s.subject_id === materiaId));
+}
+
+function minutosHojeFonte(fonteId) {
+  return somaMinutos(sessoesTerminadasHoje().filter(s => s.source_id === fonteId));
+}
+
+// Minutos que contam para a meta diária: só matérias que contam para a meta,
+// e cada uma no máximo até à sua meta definida.
+function minutosHojeMeta() {
+  const total = getMaterias().reduce((t, m) => {
+    if (!m.conta_na_meta) return t;
+    return t + Math.min(minutosHojeMateria(m.id), m.meta_diaria_min || 0);
+  }, 0);
+  return Math.round(total * 10) / 10;
 }
 
 // ── TOAST ──────────────────────────────────────────────
@@ -445,7 +468,7 @@ function renderHome() {
   document.getElementById('home-greeting').textContent = `Olá, ${nome}! 👋`;
 
   // Minutos hoje (user)
-  const minHoje = getMinutosHoje(user);
+  const minHoje = minutosHojeMeta();
   document.getElementById('home-min-hoje').textContent = formatMin(minHoje);
 
   // Meta total e cálculo de progresso
@@ -525,7 +548,7 @@ function renderHome() {
   }
 
   list.innerHTML = materias.map(m => {
-    const minH = getMinutosHoje(m);
+    const minH = minutosHojeMateria(m.id);
     const meta  = m.meta_diaria_min || 0;
     const pct = meta > 0 ? Math.min(100, Math.round((minH / meta) * 100)) : (minH > 0 ? 100 : 0);
     const isDone = minH >= meta && meta > 0;
@@ -638,7 +661,7 @@ function renderDetalheMateria() {
   const m = materias.find(x => x.id === currentMateriaId);
   if (!m) return;
 
-  const minHoje = getMinutosHoje(m);
+  const minHoje = minutosHojeMateria(m.id);
   const meta = m.meta_diaria_min || 0;
   const pct = meta > 0 ? Math.min(100, Math.round((minHoje / meta) * 100)) : (minHoje > 0 ? 100 : 0);
   const isDone = minHoje >= meta && meta > 0;
@@ -679,7 +702,7 @@ function renderDetalheMateria() {
 
   const sessoes = getSessoes();
   list.innerHTML = fontes.map(f => {
-    const minH = getMinutosHoje(f);
+    const minH = minutosHojeFonte(f.id);
     const sessaoEmCurso = sessoes.find(s => s.source_id === f.id && s.estado === 'Em curso');
     const temSessaoHoje = sessoes.some(s =>
       s.source_id === f.id && s.estado === 'Terminada' && isToday(s.hora_inicio));
@@ -1019,7 +1042,7 @@ function verificarAlertasEstudo(elapsedSeconds) {
     const materias = getMaterias();
     const materia = materias.find(x => x.id === currentMateriaId);
     if (materia && materia.meta_diaria_min > 0) {
-      const totalHojeEstimado = getMinutosHoje(materia) + minutosNaSessao;
+      const totalHojeEstimado = minutosHojeMateria(materia.id) + minutosNaSessao;
       if (totalHojeEstimado >= materia.meta_diaria_min) {
         metaAlertGiven = true;
         dispararNotificacao(
@@ -1175,31 +1198,6 @@ function guardarReflexao() {
   goTo('screen-sessao-concluida');
 }
 
-// Guardar sessão sem preencher reflexão (ir direto ao ecrã de conclusão)
-function guardarSemReflexao() {
-  const sessoes = getSessoes();
-  const idx = sessoes.findIndex(s => s.id === currentSessaoId);
-  if (idx === -1) { goTo('screen-home'); renderHome(); return; }
-
-  // Guardar o ponto de paragem que estiver preenchido
-  const pontoVal = document.getElementById('ref-ponto').value;
-  sessoes[idx].ponto_paragem = pontoVal;
-  saveSessoes(sessoes);
-
-  // Atualizar ponto de paragem da fonte
-  const fontes = getFontes();
-  const fIdx = fontes.findIndex(f => f.id === currentFonteId);
-  if (fIdx !== -1) {
-    fontes[fIdx].ponto_paragem = pontoVal;
-    saveFontes(fontes);
-  }
-
-  const s = sessoes[idx];
-  document.getElementById('sc-minutos').textContent = formatMin(s.minutos);
-  document.getElementById('sc-info').textContent = `${s.nome_materia} · ${s.nome_fonte}`;
-  goTo('screen-sessao-concluida');
-}
-
 // Voltar ao cronómetro a partir da reflexão (cancela o "terminar")
 function voltarDaReflexao() {
   if (!currentSessaoId) { goTo('screen-home'); renderHome(); return; }
@@ -1264,11 +1262,8 @@ function voltarDaReflexao() {
   document.getElementById('cron-duvidas').value = s.duvidas || '';
 
   clearInterval(timerInterval);
-  timerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
-    document.getElementById('cron-timer').textContent = formatTime(elapsed);
-    verificarAlertasEstudo(elapsed);
-  }, 1000);
+  timerInterval = setInterval(updateTimer, 1000);
+  updateTimer();
 
   goTo('screen-cronometro');
   toast('Sessão retomada!');
