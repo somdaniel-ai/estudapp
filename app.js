@@ -64,6 +64,8 @@ function syncToCloud() {
   if (!db || !currentUserUid) return;
   clearTimeout(cloudSyncTimeout);
   cloudSyncTimeout = setTimeout(() => {
+    // A sessão pode ter terminado entretanto
+    if (!db || !currentUserUid) return;
     const payload = {
       user: getUser(),
       subjects: getMaterias(),
@@ -101,6 +103,38 @@ function saveSessoes(arr) {
 }
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function mesmoEmail(a, b) {
+  return !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function limparDadosLocaisUtilizador() {
+  localStorage.removeItem('user');
+  localStorage.removeItem('subjects');
+  localStorage.removeItem('sources');
+  localStorage.removeItem('sessions');
+}
+
+// ── HELPERS – password local (modo offline) ─────────────
+// A password nunca é guardada em texto simples: guarda-se um hash SHA-256 com salt.
+async function hashPassword(password, salt) {
+  const data = new TextEncoder().encode(salt + ':' + password);
+  if (!window.crypto || !crypto.subtle) {
+    // Páginas sem HTTPS não têm crypto.subtle: usa um hash simples (melhor que texto simples)
+    let h = 2166136261;
+    for (const b of data) { h ^= b; h = Math.imul(h, 16777619) >>> 0; }
+    return 'fnv-' + h.toString(16);
+  }
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function novoSalt() {
+  const arr = new Uint8Array(16);
+  if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(arr);
+  else for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
+  return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
 // ── HELPERS – datas ────────────────────────────────────
 function startOfToday() {
@@ -279,8 +313,13 @@ async function carregarDadosDaNuvem(uid) {
       if (data.sessions) localStorage.setItem('sessions', JSON.stringify(data.sessions));
       if (data.theme)    applyTheme(data.theme);
     } else {
-      // Se ainda não tem doc na nuvem mas tem local, migra dados locais para a nuvem
-      syncToCloud();
+      // Se ainda não tem doc na nuvem mas tem dados locais DESTE utilizador,
+      // migra-os para a nuvem. Dados locais de outra pessoa nunca são enviados.
+      const localUser = getUser();
+      const authEmail = auth && auth.currentUser ? auth.currentUser.email : null;
+      if (localUser && mesmoEmail(localUser.email, authEmail)) {
+        syncToCloud();
+      }
     }
   } catch (e) {
     console.error("Erro ao carregar dados da nuvem:", e);
@@ -377,8 +416,11 @@ async function criarConta() {
     }
   } else {
     // Modo local (sem internet)
-    const user = { name: nome, email, password, meta_total: 0, minutos_hoje: 0, dia_minutos: Date.now() };
+    const salt = novoSalt();
+    const password_hash = await hashPassword(password, salt);
+    const user = { name: nome, email, password_salt: salt, password_hash, meta_total: 0, minutos_hoje: 0, dia_minutos: Date.now() };
     saveUser(user);
+    if (btn) { btn.disabled = false; btn.textContent = txtOriginal; }
     goTo('screen-home');
     renderHome();
   }
@@ -403,7 +445,25 @@ async function entrar() {
       currentUserUid = cred.user.uid;
       toast('Sessão iniciada! A carregar os teus estudos...');
 
+      // Dados deixados neste aparelho por outra conta não podem passar para esta
+      const localUser = getUser();
+      if (localUser && !mesmoEmail(localUser.email, cred.user.email)) {
+        limparDadosLocaisUtilizador();
+      }
+
       await carregarDadosDaNuvem(currentUserUid);
+
+      // Conta sem dados na nuvem: cria o perfil básico
+      if (!getUser()) {
+        saveUser({
+          name: cred.user.displayName || cred.user.email.split('@')[0],
+          email: cred.user.email,
+          meta_total: 0,
+          minutos_hoje: 0,
+          dia_minutos: Date.now()
+        });
+      }
+
       iniciarEscutaNuvem(currentUserUid);
 
       document.getElementById('en-email').value = '';
@@ -413,19 +473,40 @@ async function entrar() {
       renderHome();
     } catch (err) {
       console.error(err);
-      let msg = 'Email ou password incorretos!';
-      if (err.code === 'auth/user-not-found')    msg = 'Conta não encontrada! Verifica o email.';
-      else if (err.code === 'auth/wrong-password') msg = 'Password incorreta!';
-      else if (err.code === 'auth/invalid-email')  msg = 'Email inválido!';
+      // Com a proteção contra enumeração de emails, o Firebase devolve
+      // 'auth/invalid-credential' tanto para email inexistente como para password errada.
+      let msg = 'Erro ao entrar. Tenta novamente.';
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') msg = 'Email ou password incorretos!';
+      else if (err.code === 'auth/user-not-found')    msg = 'Conta não encontrada! Verifica o email.';
+      else if (err.code === 'auth/wrong-password')    msg = 'Password incorreta!';
+      else if (err.code === 'auth/invalid-email')     msg = 'Email inválido!';
+      else if (err.code === 'auth/user-disabled')     msg = 'Esta conta foi desativada.';
       else if (err.code === 'auth/too-many-requests') msg = 'Muitas tentativas falhadas. Tenta daqui a pouco.';
+      else if (err.code === 'auth/network-request-failed') msg = 'Sem ligação à internet.';
       toast(msg);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = txtOriginal; }
     }
   } else {
     // Modo local
+    if (btn) { btn.disabled = false; btn.textContent = txtOriginal; }
     const user = getUser();
-    if (!user || user.email !== email || user.password !== password) {
+    let ok = false;
+    if (user && mesmoEmail(user.email, email)) {
+      if (user.password_hash && user.password_salt) {
+        ok = (await hashPassword(password, user.password_salt)) === user.password_hash;
+      } else if (user.password !== undefined) {
+        // Conta antiga com password em texto simples: valida e converte para hash
+        ok = user.password === password;
+        if (ok) {
+          user.password_salt = novoSalt();
+          user.password_hash = await hashPassword(password, user.password_salt);
+          delete user.password;
+          saveUser(user);
+        }
+      }
+    }
+    if (!ok) {
       toast('Email ou password incorretos!');
       return;
     }
@@ -437,7 +518,8 @@ async function entrar() {
 }
 
 function recuperarPassword() {
-  const email = prompt('Escreve o teu email para receberes um link de recuperação de password:');
+  const emailAtual = (document.getElementById('en-email')?.value || '').trim();
+  const email = prompt('Escreve o teu email para receberes um link de recuperação de password:', emailAtual);
   if (!email || !email.trim()) return;
 
   if (!auth) {
@@ -445,11 +527,21 @@ function recuperarPassword() {
     return;
   }
 
+  // Email de recuperação em português
+  auth.languageCode = 'pt';
+
+  // Nota: com a "proteção contra enumeração de emails" do Firebase ativa,
+  // o pedido tem sucesso mesmo que não exista conta com esse email.
   auth.sendPasswordResetEmail(email.trim())
-    .then(() => toast('Email de recuperação enviado! Verifica a tua caixa de correio.'))
+    .then(() => toast('Se existir uma conta com esse email, vais receber um link. Verifica também a pasta de spam/lixo.'))
     .catch(err => {
       console.error(err);
-      toast('Não foi possível enviar o email. Verifica o endereço.');
+      let msg = 'Não foi possível enviar o email. Verifica o endereço.';
+      if (err.code === 'auth/invalid-email')          msg = 'Formato de email inválido!';
+      else if (err.code === 'auth/user-not-found')    msg = 'Não existe nenhuma conta com esse email.';
+      else if (err.code === 'auth/too-many-requests') msg = 'Demasiados pedidos. Tenta daqui a pouco.';
+      else if (err.code === 'auth/network-request-failed') msg = 'Sem ligação à internet.';
+      toast(msg);
     });
 }
 
@@ -1690,12 +1782,10 @@ function updateMetaMateria(id) {
 
 function terminarSessaoUser() {
   if (!confirm('Tens a certeza que queres terminar a sessão neste aparelho?')) return;
+  clearTimeout(cloudSyncTimeout);
   if (cloudUnsubscribe) { cloudUnsubscribe(); cloudUnsubscribe = null; }
   currentUserUid = null;
-  localStorage.removeItem('user');
-  localStorage.removeItem('subjects');
-  localStorage.removeItem('sources');
-  localStorage.removeItem('sessions');
+  limparDadosLocaisUtilizador();
   if (auth) {
     auth.signOut().finally(() => {
       goTo('screen-inicio');
@@ -1706,10 +1796,55 @@ function terminarSessaoUser() {
   }
 }
 
-function confirmarApagarConta() {
+async function confirmarApagarConta() {
   if (!confirm('Tens a certeza? Todos os dados serão apagados permanentemente!')) return;
+
+  const firebaseUser = auth ? auth.currentUser : null;
+
+  // Modo local (sem conta na nuvem): basta limpar o aparelho
+  if (!firebaseUser) {
+    localStorage.clear();
+    goTo('screen-inicio');
+    toast('Conta apagada.');
+    return;
+  }
+
+  // O Firebase exige um login recente para apagar a conta,
+  // por isso confirmamos a password antes de apagar qualquer coisa.
+  const password = prompt('Para confirmar, escreve a tua password:');
+  if (!password) return;
+
+  try {
+    const credencial = firebase.auth.EmailAuthProvider.credential(firebaseUser.email, password);
+    await firebaseUser.reauthenticateWithCredential(credencial);
+  } catch (err) {
+    console.error(err);
+    let msg = 'Não foi possível confirmar a password.';
+    if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') msg = 'Password incorreta! A conta não foi apagada.';
+    else if (err.code === 'auth/too-many-requests') msg = 'Muitas tentativas falhadas. Tenta daqui a pouco.';
+    else if (err.code === 'auth/network-request-failed') msg = 'Sem ligação à internet. A conta não foi apagada.';
+    toast(msg);
+    return;
+  }
+
+  // Parar sincronização para não voltar a criar os dados na nuvem
+  clearTimeout(cloudSyncTimeout);
+  if (cloudUnsubscribe) { cloudUnsubscribe(); cloudUnsubscribe = null; }
+
+  try {
+    if (db) await db.collection('users').doc(firebaseUser.uid).delete();
+    await firebaseUser.delete();
+  } catch (err) {
+    console.error(err);
+    toast('Erro ao apagar a conta. Tenta novamente.');
+    if (db) iniciarEscutaNuvem(firebaseUser.uid);
+    return;
+  }
+
+  currentUserUid = null;
   localStorage.clear();
   goTo('screen-inicio');
+  toast('Conta apagada permanentemente.');
 }
 
 // ══════════════════════════════════════════════════════

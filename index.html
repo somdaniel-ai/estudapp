@@ -44,7 +44,7 @@
     </div>
     <button class="btn btn-primary mt-8" onclick="criarConta()">Criar conta</button>
     <p class="text-center text-muted mt-16">
-      Já tens conta? <a href="#" onclick="goTo('screen-entrar')">Entrar</a>
+      Já tens conta? <a href="#" onclick="goTo('screen-entrar'); return false;">Entrar</a>
     </p>
   </section>
 
@@ -66,10 +66,10 @@
     </div>
     <button class="btn btn-primary mt-8" onclick="entrar()">Entrar</button>
     <p class="text-center text-muted mt-8">
-      <a href="#" onclick="recuperarPassword()" style="font-size:13px">Esqueceste-te da password?</a>
+      <a href="#" onclick="recuperarPassword(); return false;" style="font-size:13px">Esqueceste-te da password?</a>
     </p>
     <p class="text-center text-muted mt-16">
-      Não tens conta? <a href="#" onclick="goTo('screen-criar-conta')">Criar conta</a>
+      Não tens conta? <a href="#" onclick="goTo('screen-criar-conta'); return false;">Criar conta</a>
     </p>
   </section>
 
